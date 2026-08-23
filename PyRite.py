@@ -2,9 +2,9 @@ import gi, re, os, json
 gi.require_version("Gtk", "3.0")
 from gi.repository import Gtk, Gdk, Pango, GLib, Gio
 
-class DarkEditor(Gtk.Window):
+class PyRiteEditor(Gtk.Window):
     def __init__(self):
-        super().__init__(title="DarkVim Editor")
+        super().__init__(title="PyRite")
         self.set_default_size(800, 550)
         
         # state
@@ -22,7 +22,7 @@ class DarkEditor(Gtk.Window):
         self.indent = "4s" # 4s, 2s, Tab
         self.syntax_timeout = None
         
-        self.recent_path = os.path.expanduser("~/.dark_editor_recent.json")
+        self.recent_path = os.path.expanduser("~/.pyrite_recents.json")
         self.recents = self.load_recents()
 
         # css
@@ -633,10 +633,10 @@ class DarkEditor(Gtk.Window):
         words = len(self.buf.get_text(s, e, True).split())
         
         self.lbl_status.set_markup(f"{mode} {fname} {mod}  |  Ln {line}, Col {col}  |  Words: {words}  |  UTF-8")
-        self.set_title(f"{'● ' if self.modified else ''}{fname} - DarkVim Editor")
+        self.set_title(f"{'● ' if self.modified else ''}{fname} - PyRite")
 
 if __name__ == "__main__":
-    win = DarkEditor()
+    win = PyRiteEditor()
     win.connect("destroy", Gtk.main_quit)
     win.show_all()
     # show_all() reveals every child; re-hide the panes that start disabled
