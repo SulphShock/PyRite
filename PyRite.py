@@ -1,6 +1,6 @@
 import gi, re, os, json
 gi.require_version("Gtk", "3.0")
-from gi.repository import Gtk, Gdk, Pango, GLib, Gio
+from gi.repository import Gtk, Gdk, Pango, GLib
 
 # yeet keywords to global so we don't rebuild this list on every keystroke
 KWS = ["def", "class", "return", "if", "else", "elif", "import", "from", "while", "for", "in", "not", "and", "or", "True", "False", "None"]
@@ -28,7 +28,7 @@ class DarkEditor(Gtk.Window):
         .pill-button:hover { background-color: #3e3e3e; color: #ffffff; }
         .pill-button:active, .pill-button:checked { background-color: #d19a66; color: #1e1e1e; font-weight: bold; }
         .pill-button:checked:hover { background-color: #e0a878; color: #1e1e1e; }
-        textview text { background-color: #1e1e1e; color: #e0e0e0; font-family: 'JetBrains Mono',, monospace; font-size: 11pt; caret-color: #d19a66; }
+        textview text { background-color: #1e1e1e; color: #e0e0e0; font-family: 'JetBrains Mono', monospace; font-size: 11pt; caret-color: #d19a66; }
         textview text:active, textview text:focus, textview text:hover { background-color: #1e1e1e; color: #e0e0e0; }
         textview selection { background-color: rgba(209, 154, 102, 0.25); color: #ffffff; }
         .line-numbers { background-color: #1e1e1e; color: #4a4a4a; font-size: 9pt; }
@@ -58,37 +58,39 @@ class DarkEditor(Gtk.Window):
         tbar = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=4)
         tbar.get_style_context().add_class("top-bar")
         m_box.pack_start(tbar, False, False, 0)
-        
         self.menu = Gtk.Menu()
         self.build_menu()
         self.btn_opts = Gtk.MenuButton(label="Options")
-        self.btn_opts.get_style_context().add_class("pilll-button")
-        self.btn_opts.set.popup(self.menu)
-        tbar.pack_start(self.bin_opts, False, False, 0)
-
-        self.btn_vim = Gtk.TggleButton(label="Vim")
-        slef.btn_vim.get_style_context().add_class("pill-button")
-        self.btn_vim.connect("Toggled", self.toggle_vim)
+        self.btn_opts.get_style_context().add_class("pill-button")
+        self.btn_opts.set_popup(self.menu)
+        tbar.pack_start(self.btn_opts, False, False, 0)
+        self.btn_vim = Gtk.ToggleButton(label="Vim")
+        self.btn_vim.get_style_context().add_class("pill-button")
+        self.btn_vim.connect("toggled", self.toggle_vim)
         self.btn_render = Gtk.Button(label="Render")
         self.btn_render.get_style_context().add_class("pill-button")
         self.btn_render.connect("clicked", self.toggle_render)
         tbar.pack_end(self.btn_vim, False, False, 0)
         tbar.pack_end(self.btn_render, False, False, 0)
+        self.btn_indent = Gtk.Button(label=self.indent)
+        self.btn_indent.get_style_context().add_class("pill-button")
+        self.btn_indent.connect("clicked", self.toggle_indent)
+        tbar.pack_end(self.btn_indent, False, False, 0)
 
         #EDITOR SPLIT I REPEAT EDITOR SPLIT 
 
-        self.panned = Gtk.Panned(orientation=Gtk.Orientation.HORIZONTAL)
-        m_box.pac_start(self.paned, True, True, 0)
-        ed_box = Gtk.Box(oritation=Gtk.Orientation.HORIZONTAL)
+        self.panned = Gtk.Paned(orientation=Gtk.Orientation.HORIZONTAL)
+        m_box.pack_start(self.paned, True, True, 0)
+        ed_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL)
         self.line_nums = Gtk.TextView()
-        self.line_nums.get_style_context().add_class("Line Numbers")
+        self.line_nums.get_style_context().add_class("line-numbers")
         self.line_nums.set_editable(False)
         self.line_nums.set_cursor_visible(False)
-        self.line_nums_buf = self.lines_nums.get_buffer()
+        self.line_nums_buf = self.line_nums.get_buffer()
+        self.line_nums.set_no_show_all(True)
         ed_box.pack_start(self.line_nums, False, False, 0)
         if not self.show_lines: self.line_nums.hide()
-
-        self.scroll = Gtk.ScrollWindow()
+        self.scroll = Gtk.ScrolledWindow()
         ed_box.pack_start(self.scroll, True, True, 0)
         self.tview = Gtk.TextView()
         self.tview.set_wrap_mode(Gtk.WrapMode.WORD if self.wrap else Gtk.WrapMode.NONE)
@@ -101,10 +103,9 @@ class DarkEditor(Gtk.Window):
         self.buf.create_tag("Bold", weight=Pango.Weight.BOLD)
         self.buf.create_tag("Italic", style=Pango.Style.ITALIC)
         self.buf.create_tag("search-match", background="#d19a66")
-        self.buf.create_tag("syn_keyword", foregorund="#56b6c2")
+        self.buf.create_tag("syn_keyword", foreground="#56b6c2")
         self.buf.create_tag("syn_string", foreground="#98c379")
-        slef.buf.create_tag("syn_comment", foreground="#5c6370", style=Pango.Style.ITALIC)
-
+        self.buf.create_tag("syn_comment", foreground="#5c6370", style=Pango.Style.ITALIC)
         self.scroll.add(self.tview)
         self.panned.pack1(ed_box, resize=True, shrink=False)
         
@@ -113,6 +114,7 @@ class DarkEditor(Gtk.Window):
 
          # ForkingRender Of tHE VIEW
         self.render_scroll = Gtk.ScrolledWindow()
+        self.render_scroll.set_no_show_all(True)
         self.r_view = Gtk.TextView()
         self.r_view.set_editable(False); self.r_view.set_cursor_visible(False); self.r_view.set_left_margin(15); self.r_view.set_right_margin(15); self.r_view.set_top_margin(10)
         self.r_view.set_wrap_mode(Gtk.WrapMode.WORD)
@@ -125,9 +127,9 @@ class DarkEditor(Gtk.Window):
 
         #Find Bar
 
-        self.find.rev = Gtk.Revealer()
-        f_box = Gtk.Box(Orientation=Gtk.Orientation.HORIZONTAL, spacing=8)
-        f_box.get_style_context().add_class("Find-Bar")
+        self.find_rev = Gtk.Revealer()
+        f_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=8)
+        f_box.get_style_context().add_class("find-bar")
         self.find_entry = Gtk.Entry()
         self.find_entry.set_placeholder_text("Find...")
         self.find_entry.connect("changed", self.on_search)
@@ -149,17 +151,16 @@ class DarkEditor(Gtk.Window):
         sbar.pack_start(self.lbl_status, False, False, 0)
 
         # Signals
-        self.tview.connect("key-press-event", self.handel_vim_key)
-        self.tview.connnect("key-press-event", self.handel_keys)
-        self.buf.connect("modified-changed", self.on.modified)
+        self.tview.connect("key-press-event", self.handle_vim_key)
+        self.tview.connect("key-press-event", self.handle_keys)
+        self.buf.connect("modified-changed", self.on_modified)
+        self.buf.connect("changed", self.on_text_changed)
         self.buf.connect("notify::cursor-position", lambda b, p: self. update_status())
         self.scroll.get_vadjustment().connect("value-changed", self.sync_line_nums)
-
         self.accel = Gtk.AccelGroup()
         self.add_accel_group(self.accel)
         self.btn_render.add_accelerator("clicked", self.accel, ord('R'), Gdk.ModifierType.CONTROL_MASK, Gtk.AccelFlags.VISIBLE)
         self.update_status()
-
     def build_menu(self):
         for c in self.menu.get_children(): self.menu.remove(c)
         for lbl, cb in [("New", self.new_file), ("Open", self.open_file), ("Save", self.save_file), ("Save As...", self.save_as)]:
@@ -167,7 +168,7 @@ class DarkEditor(Gtk.Window):
         self.menu.append(Gtk.SeparatorMenuItem())
 
         # Recnts
-        rec_mennu = Gtk.Menu()
+        rec_menu = Gtk.Menu()
         if not self.recents:
             i = Gtk.MenuItem(label="No recent files"); i.set_sensitive(False); rec_menu.append(i)
         else:
@@ -175,63 +176,51 @@ class DarkEditor(Gtk.Window):
                 i = Gtk.MenuItem(label=os.path.basename(f)); i.connect("activate", lambda w, p=f: self.open_file(path=p)); rec_menu.append(i)
         rec_item = Gtk.MenuItem(label="Recent Files"); rec_item.set_submenu(rec_menu); self.menu.append(rec_item)
         self.menu.append(Gtk.SeparatorMenuItem())
-
         # Toggles
         self.chk_lines = Gtk.CheckMenuItem(label="Show Line Numbers"); self.chk_lines.set_active(self.show_lines); self.chk_lines.connect("toggled", self.toggle_lines); self.menu.append(self.chk_lines)
         self.chk_wrap = Gtk.CheckMenuItem(label="Word Wrap"); self.chk_wrap.set_active(self
-
 .wrap); self.chk_wrap.connect("toggled", self.toggle_wrap); self.menu.append(self.chk_wrap)
         self.chk_syn = Gtk.CheckMenuItem(label="Syntax Highlighting"); self.chk_syn.set_active(self.syntax); self.chk_syn.connect("toggled", self.toggle_syntax); self.menu.append(self.chk_syn)
-        
         self.menu.append(Gtk.SeparatorMenuItem())
         q = Gtk.MenuItem(label="Quit"); q.connect("activate", Gtk.main_quit); self.menu.append(q)
         self.menu.show_all()
-def load_recents(self):
+    def load_recents(self):   
         if os.path.exists(self.recent_path):
             try:
                 with open(self.recent_path, "r") as f: return json.load(f)
-            except: # idc
+            except Exception: # idc
                 return []
         return []
-
     def save_recents(self):
         with open(self.recent_path, "w") as f: json.dump(self.recents, f)
-
     def add_recent(self, path):
         if path in self.recents: self.recents.remove(path)
         self.recents.insert(0, path)
         self.recents = self.recents[:5]
         self.save_recents(); self.build_menu()
-
     def toggle_lines(self, w=None):
         self.show_lines = w.get_active() if w else not self.show_lines
         if self.show_lines: self.line_nums.show(); self.sync_line_nums()
         else: self.line_nums.hide()
-
     def toggle_wrap(self, w=None):
-        self.wrap = not self.wrap
+        self.wrap = w.get_active() if isinstance(w, Gtk.CheckMenuItem) else not self.wrap
         self.tview.set_wrap_mode(Gtk.WrapMode.WORD if self.wrap else Gtk.WrapMode.NONE)
         if hasattr(self, 'chk_wrap'): self.chk_wrap.set_active(self.wrap)
-
-def toggle_syntax(self, w=None):
-        self.syntax = not self.syntax
+    def toggle_syntax(self, w=None): 
+        self.syntax = w.get_active() if isinstance(w, Gtk.CheckMenuItem) else not self.syntax
         if not self.syntax:
             s, e = self.buf.get_bounds()
             for t in ["syn_keyword", "syn_string", "syn_comment"]: self.buf.remove_tag_by_name(t, s, e)
         else: self.do_syntax()
         if hasattr(self, 'chk_syn'): self.chk_syn.set_active(self.syntax)
-        
     def toggle_indent(self, w=None):
         self.indent = "2s" if self.indent == "4s" else "Tab" if self.indent == "2s" else "4s"
         self.btn_indent.set_label(self.indent); self.update_status()
-
-    def toggle_render(self, w=None):
+    def toggle_render(self, w=None): 
         if self.render_scroll.get_visible(): self.render_scroll.hide()
         else: self.render_scroll.show(); self.render_tags()
-
-def on_modified(self, w):
+    def on_modified(self, w):
         self.modified = self.buf.get_modified(); self.update_status()
-
     def on_text_changed(self, w):
         self.update_status()
         s, e = self.buf.get_bounds()
@@ -240,14 +229,11 @@ def on_modified(self, w):
         if self.syntax:
             if self.syntax_timeout: GLib.source_remove(self.syntax_timeout)
             self.syntax_timeout = GLib.timeout_add(300, self._do_syntax_timeout) # throttle this so it doesn't lag to death
-
-         def _do_syntax_timeout(self):
+    def _do_syntax_timeout(self):
         self.do_syntax(); self.syntax_timeout = None; return False
-
     def sync_line_nums(self, w=None):
         self.line_nums_buf.set_text("\n".join(str(i+1) for i in range(self.buf.get_line_count())))
         self.line_nums.get_vadjustment().set_value(self.scroll.get_vadjustment().get_value())
-
     def handle_keys(self, w, event):
         # ctrl+f
         if event.keyval == Gdk.keyval_from_name("f") and event.state & Gdk.ModifierType.CONTROL_MASK:
@@ -255,7 +241,6 @@ def on_modified(self, w):
         # alt+z
         if event.keyval == Gdk.keyval_from_name("z") and event.state & Gdk.ModifierType.MOD1_MASK:
             self.toggle_wrap(); return True
-
             # auto-indent hack
         if event.keyval == Gdk.keyval_from_name("Return") and not self.vim_mode:
             buf = self.buf; itr = buf.get_iter_at_mark(buf.get_insert()); ln = itr.get_line()
@@ -263,27 +248,21 @@ def on_modified(self, w):
                 ps = buf.get_iter_at_line(ln - 1); pe = ps.copy(); pe.forward_to_line_end()
                 prev = buf.get_text(ps, pe, True)
                 indent = re.match(r'^[ \t]*', prev).group(0) # faster than looping chars
-                
                 if prev.rstrip().endswith(":"):
                     sz = 4 if self.indent == "4s" else 2 if self.indent == "2s" else 1
                     indent += (" " if "s" in self.indent else "\t") * sz
-                
                 if indent: GLib.idle_add(lambda: buf.insert_at_cursor(indent))
         return False
-
     def toggle_vim(self, w=None):
         self.vim_mode = self.btn_vim.get_active()
         if self.vim_mode:
             self.vim_state = "NORMAL"; self.vim_cmd_mode = False; self.vim_cmd = ""; self.btn_vim.set_label("Vim: ON")
         else: self.btn_vim.set_label("Vim")
         self.update_status()
-
     def handle_vim_key(self, w, event):
-        if not self.vim_mode: return False
-
+        if event.state & Gdk.ModifierType.CONTROL_MASK: return False
         keyname = Gdk.keyval_name(event.keyval)
         char = chr(Gdk.keyval_to_unicode(event.keyval)) if Gdk.keyval_to_unicode(event.keyval) != 0 else ""
-
         if self.vim_cmd_mode:
             if keyname == "Return": self.run_vim_cmd(); return True
             elif keyname == "Escape": self.vim_cmd_mode = False; self.vim_cmd = ""
@@ -292,14 +271,11 @@ def on_modified(self, w):
                 if not self.vim_cmd: self.vim_cmd_mode = False
             else: self.vim_cmd += char
             self.update_status(); return True
-
         if self.vim_state == "INSERT":
             if keyname == "Escape":
                 self.vim_state = "NORMAL"; self.update_status(); return True
             return False
-
         if keyname == "Escape": self.vim_state = "NORMAL"; self.update_status(); return True
-
         if char == ':': self.vim_cmd_mode = True; self.vim_cmd = ":"; self.update_status(); return True
         elif char == 'i': self.vim_state = "INSERT"; self.update_status(); return True
         elif char in ['h', 'j', 'k', 'l', 'x']:
@@ -314,20 +290,17 @@ def on_modified(self, w):
                 self.buf.delete(itr, end)
             self.buf.place_cursor(itr); self.tview.scroll_to_mark(mark, 0.0, True, 0.0, 0.0); return True
         return True
-
     def run_vim_cmd(self):
         cmd = self.vim_cmd.strip(":").strip()
         if cmd == "w": self.save_file()
         elif cmd == "q": Gtk.main_quit()
         elif cmd == "wq": self.save_file(); Gtk.main_quit()
         self.vim_cmd_mode = False; self.vim_cmd = ""; self.update_status()
-
     def render_tags(self, w=None):
         s, e = self.buf.get_bounds()
         parts = re.split(r'(<ts=\d+>|</ts=\d+>|<italic>|</italic>|<bold>|</bold>)', self.buf.get_text(s, e, False))
         self.r_buf.set_text("")
         tags = []; tbl = self.r_buf.get_tag_table()
-        
         for p in parts:
             if not p: continue
             if p == "<bold>": tags.append("r_bold")
@@ -342,12 +315,10 @@ def on_modified(self, w):
                 for i in range(len(tags)-1, -1, -1):
                     if tags[i].startswith("r_ts_"): tags.pop(i); break
             else: self.r_buf.insert_with_tags_by_name(self.r_buf.get_end_iter(), p, *tags)
-
     def do_syntax(self):
         s, e = self.buf.get_bounds()
         for t in ["syn_keyword", "syn_string", "syn_comment"]: self.buf.remove_tag_by_name(t, s, e)
         text = self.buf.get_text(s, e, False)
-        
         # comments
         for m in re.finditer(r'(#.*?$)', text, re.MULTILINE):
             self.buf.apply_tag_by_name("syn_comment", self.buf.get_iter_at_offset(m.start(1)), self.buf.get_iter_at_offset(m.end(1)))
@@ -357,7 +328,6 @@ def on_modified(self, w):
         # keywords
         for m in re.finditer(r'\b(' + '|'.join(KWS) + r')\b', text):
             self.buf.apply_tag_by_name("syn_keyword", self.buf.get_iter_at_offset(m.start(1)), self.buf.get_iter_at_offset(m.end(1)))
-
     def on_search(self, w):
         q = self.find_entry.get_text()
         s, e = self.buf.get_bounds()
@@ -368,14 +338,12 @@ def on_modified(self, w):
                 m = i.forward_search(q, Gtk.TextSearchFlags.CASE_INSENSITIVE, e)
                 if not m: break
                 self.buf.apply_tag_by_name("search-match", m[0], m[1]); i = m[1]
-
-        def on_search_key(self, w, event):
+    def on_search_key(self, w, event):
         if event.keyval == Gdk.keyval_from_name("Escape"):
             s, e = self.buf.get_bounds()
             self.buf.remove_tag_by_name("search-match", s, e)
             self.find_rev.set_reveal_child(False); self.tview.grab_focus(); return True
         return False
-
     def new_file(self, w=None):
         self.buf.set_text(""); self.cur_file = None; self.buf.set_modified(False); self.update_status()
 
@@ -385,7 +353,6 @@ def on_modified(self, w):
         filt = Gtk.FileFilter(); filt.set_name("Text/Python Files"); filt.add_mime_type("text/plain"); filt.add_pattern("*.py"); dlg.add_filter(filt)
         if dlg.run() == Gtk.ResponseType.ACCEPT: self.open_specific_file(dlg.get_filename())
         dlg.destroy()
-
     def open_specific_file(self, path):
         if not os.path.exists(path):
             print(f"Error: {path} gone.")
@@ -395,7 +362,6 @@ def on_modified(self, w):
             with open(path, "r") as f: content = f.read()
             self.buf.set_text(content); self.cur_file = path; self.buf.set_modified(False); self.add_recent(path); self.update_status()
         except Exception as ex: print(f"Failed: {ex}")
-
     def save_file(self, w=None):
         if not self.cur_file: self.save_as(); return
         try:
@@ -403,35 +369,28 @@ def on_modified(self, w):
             with open(self.cur_file, "w") as f: f.write(self.buf.get_text(s, e, False))
             self.buf.set_modified(False); self.add_recent(self.cur_file); self.update_status()
         except Exception as ex: print(f"Save failed: {ex}")
-
     def save_as(self, w=None):
         dlg = Gtk.FileChooserNative.new("Save File As", self, Gtk.FileChooserAction.SAVE, "_Save", "_Cancel")
         dlg.set_do_overwrite_confirmation(True)
         if dlg.run() == Gtk.ResponseType.ACCEPT: self.cur_file = dlg.get_filename(); self.save_file()
         dlg.destroy()
-
     def update_status(self):
         fname = os.path.basename(self.cur_file) if self.cur_file else "untitled"
         mod = '<span foreground="#e06c75">●</span>' if self.modified else '<span foreground="#3e3e3e">●</span>'
-        
         if not self.vim_mode: mode = '<span foreground="#abb2bf">[STANDARD]</span>'
         elif self.vim_cmd_mode: mode = f'<span foreground="#d19a66">[{self.vim_cmd}]</span>'
         elif self.vim_state == "NORMAL": mode = '<span foreground="#d19a66">[NORMAL]</span>'
         else: mode = '<span foreground="#56b6c2">[INSERT]</span>'
-            
         itr = self.buf.get_iter_at_mark(self.buf.get_insert())
         s, e = self.buf.get_bounds()
         words = len(self.buf.get_text(s, e, True).split())
-        
         self.lbl_status.set_markup(f"{mode} {fname} {mod}  |  Ln {itr.get_line() + 1}, Col {itr.get_line_offset() + 1}  |  Words: {words}  |  UTF-8")
-        self.set_title(f"{'● ' if self.modified else ''}{fname} - DarkVim Editor")
-
-if __name__ == "__main__":
-    win = DarkEditor()
+        if __name__ == "__main__" :
+        self.set_title(f"{'● ' if self.modified else ''}{fname} - PyRite")
+    win = PyRite()
     win.connect("destroy", Gtk.main_quit)
     win.show_all()
     Gtk.main()
-
     #I just wanted to tell you that I have been nothing but passionate about this project. I've really been giving it my all while working on i.
 
 #This project was inspired by the operating system I use—DHH's Arch—which is really good. That aside, I know AI is controversial and all; I don't personally support it. I used it once in this project when I wanted to get help solving some bugs, I guess.
