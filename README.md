@@ -147,9 +147,6 @@ pyrite
 
 | Shortcut | Action | Context |
 |----------|--------|---------|
-| `Ctrl + O` | Open File | Global |
-| `Ctrl + S` | Save File | Global |
-| `Ctrl + N` | New File | Global |
 | `Ctrl + F` | Find | Global |
 | `Ctrl + R` | Toggle Render | Global |
 | `Alt + Z` | Toggle Word Wrap | Global |
