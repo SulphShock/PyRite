@@ -432,4 +432,10 @@ if __name__ == "__main__":
     win.show_all()
     Gtk.main()
 
+    #I just wanted to tell you that I have been nothing but passionate about this project. I've really been giving it my all while working on i.
 
+#This project was inspired by the operating system I use—DHH's Arch—which is really good. That aside, I know AI is controversial and all; I don't personally support it. I used it once in this project when I wanted to get help solving some bugs, I guess.
+
+#This will probably be my second-to-last commit, as I plan to debug my code once more.
+
+#So hey mate, if you could kindly star this repo, it would mean a lot. It took quite a while for me to complete. I'll say it again: Love you, mate 'u'
