@@ -369,4 +369,67 @@ def on_modified(self, w):
                 if not m: break
                 self.buf.apply_tag_by_name("search-match", m[0], m[1]); i = m[1]
 
+        def on_search_key(self, w, event):
+        if event.keyval == Gdk.keyval_from_name("Escape"):
+            s, e = self.buf.get_bounds()
+            self.buf.remove_tag_by_name("search-match", s, e)
+            self.find_rev.set_reveal_child(False); self.tview.grab_focus(); return True
+        return False
+
+    def new_file(self, w=None):
+        self.buf.set_text(""); self.cur_file = None; self.buf.set_modified(False); self.update_status()
+
+    def open_file(self, w=None, path=None):
+        if path: self.open_specific_file(path); return
+        dlg = Gtk.FileChooserNative.new("Open File", self, Gtk.FileChooserAction.OPEN, "_Open", "_Cancel")
+        filt = Gtk.FileFilter(); filt.set_name("Text/Python Files"); filt.add_mime_type("text/plain"); filt.add_pattern("*.py"); dlg.add_filter(filt)
+        if dlg.run() == Gtk.ResponseType.ACCEPT: self.open_specific_file(dlg.get_filename())
+        dlg.destroy()
+
+    def open_specific_file(self, path):
+        if not os.path.exists(path):
+            print(f"Error: {path} gone.")
+            if path in self.recents: self.recents.remove(path); self.save_recents(); self.build_menu()
+            return
+        try:
+            with open(path, "r") as f: content = f.read()
+            self.buf.set_text(content); self.cur_file = path; self.buf.set_modified(False); self.add_recent(path); self.update_status()
+        except Exception as ex: print(f"Failed: {ex}")
+
+    def save_file(self, w=None):
+        if not self.cur_file: self.save_as(); return
+        try:
+            s, e = self.buf.get_bounds()
+            with open(self.cur_file, "w") as f: f.write(self.buf.get_text(s, e, False))
+            self.buf.set_modified(False); self.add_recent(self.cur_file); self.update_status()
+        except Exception as ex: print(f"Save failed: {ex}")
+
+    def save_as(self, w=None):
+        dlg = Gtk.FileChooserNative.new("Save File As", self, Gtk.FileChooserAction.SAVE, "_Save", "_Cancel")
+        dlg.set_do_overwrite_confirmation(True)
+        if dlg.run() == Gtk.ResponseType.ACCEPT: self.cur_file = dlg.get_filename(); self.save_file()
+        dlg.destroy()
+
+    def update_status(self):
+        fname = os.path.basename(self.cur_file) if self.cur_file else "untitled"
+        mod = '<span foreground="#e06c75">●</span>' if self.modified else '<span foreground="#3e3e3e">●</span>'
+        
+        if not self.vim_mode: mode = '<span foreground="#abb2bf">[STANDARD]</span>'
+        elif self.vim_cmd_mode: mode = f'<span foreground="#d19a66">[{self.vim_cmd}]</span>'
+        elif self.vim_state == "NORMAL": mode = '<span foreground="#d19a66">[NORMAL]</span>'
+        else: mode = '<span foreground="#56b6c2">[INSERT]</span>'
+            
+        itr = self.buf.get_iter_at_mark(self.buf.get_insert())
+        s, e = self.buf.get_bounds()
+        words = len(self.buf.get_text(s, e, True).split())
+        
+        self.lbl_status.set_markup(f"{mode} {fname} {mod}  |  Ln {itr.get_line() + 1}, Col {itr.get_line_offset() + 1}  |  Words: {words}  |  UTF-8")
+        self.set_title(f"{'● ' if self.modified else ''}{fname} - DarkVim Editor")
+
+if __name__ == "__main__":
+    win = DarkEditor()
+    win.connect("destroy", Gtk.main_quit)
+    win.show_all()
+    Gtk.main()
+
 
