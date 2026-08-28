@@ -304,7 +304,7 @@ class PyRiteEditor(Gtk.Window):
         if new == self.wrap: return  # guard: set_active below re-emits "toggled"
         self.wrap = new
         self.tview.set_wrap_mode(Gtk.WrapMode.WORD if self.wrap else Gtk.WrapMode.NONE)
-        if hasattr(self, 'chk_wrap'): self.chk_wrap.set_active(self.wrap)
+        self.chk_wrap.set_active(self.wrap)
 
     def toggle_syntax(self, w=None):
         new = w.get_active() if w else not self.syntax
@@ -316,7 +316,7 @@ class PyRiteEditor(Gtk.Window):
                 self.buf.remove_tag_by_name(tag, s, e)
         else:
             self.do_syntax()
-        if hasattr(self, 'chk_syn'): self.chk_syn.set_active(self.syntax)
+        self.chk_syn.set_active(self.syntax)
         
     def toggle_indent(self, w=None):
         self.indent = "2s" if self.indent == "4s" else "Tab" if self.indent == "2s" else "4s"
