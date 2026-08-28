@@ -1,6 +1,7 @@
+#!/usr/bin/env python3
 import gi, re, os, json
 gi.require_version("Gtk", "3.0")
-from gi.repository import Gtk, Gdk, Pango, GLib, Gio
+from gi.repository import Gtk, Gdk, Pango, GLib
 
 class PyRiteEditor(Gtk.Window):
     def __init__(self):
@@ -20,7 +21,8 @@ class PyRiteEditor(Gtk.Window):
         self.wrap = True
         self.syntax = False
         self.indent = "4s" # 4s, 2s, Tab
-        self.syntax_timeout = None
+        self.words = 0
+        self.deferred_id = None
         
         self.recent_path = os.path.expanduser("~/.pyrite_recents.json")
         self.recents = self.load_recents()
@@ -138,10 +140,11 @@ class PyRiteEditor(Gtk.Window):
         # tags
         self.buf.create_tag("bold", weight=Pango.Weight.BOLD)
         self.buf.create_tag("italic", style=Pango.Style.ITALIC)
-        self.buf.create_tag("search-match", background="#d19a66", foreground="#1e1e1e")
+        # search-match created last so its colors beat the syntax tags (later = higher priority)
         self.buf.create_tag("syn_keyword", foreground="#56b6c2")
         self.buf.create_tag("syn_string", foreground="#98c379")
         self.buf.create_tag("syn_comment", foreground="#5c6370", style=Pango.Style.ITALIC)
+        self.buf.create_tag("search-match", background="#d19a66", foreground="#1e1e1e")
         
         self.scroll.add(self.tview)
         self.paned.pack1(ed_box, resize=True, shrink=False)
@@ -203,7 +206,7 @@ class PyRiteEditor(Gtk.Window):
         self.buf.connect("changed", self.on_text_changed)
         self.buf.connect("notify::cursor-position", lambda b, p: self.update_status())
         
-        self.scroll.get_vadjustment().connect("value-changed", self.sync_line_nums)
+        self.scroll.get_vadjustment().connect("value-changed", lambda adj: self.line_nums.get_vadjustment().set_value(adj.get_value()))
         
         self.accel = Gtk.AccelGroup()
         self.add_accel_group(self.accel)
@@ -262,20 +265,22 @@ class PyRiteEditor(Gtk.Window):
         
         self.menu.append(Gtk.SeparatorMenuItem())
         quit_item = Gtk.MenuItem(label="Quit")
-        quit_item.connect("activate", Gtk.main_quit)
+        quit_item.connect("activate", self.quit_app)
         self.menu.append(quit_item)
         self.menu.show_all()
 
     def load_recents(self):
-        if os.path.exists(self.recent_path):
-            try:
-                with open(self.recent_path, "r") as f: return json.load(f)
-            except:
-                return []
-        return []
+        try:
+            with open(self.recent_path) as f: data = json.load(f)
+            return [p for p in data if isinstance(p, str)] if isinstance(data, list) else []
+        except Exception:
+            return []
 
     def save_recents(self):
-        with open(self.recent_path, "w") as f: json.dump(self.recents, f)
+        try:
+            with open(self.recent_path, "w") as f: json.dump(self.recents, f)
+        except Exception as ex:
+            print(f"Could not save recents: {ex}")
 
     def add_recent(self, path):
         if path in self.recents: self.recents.remove(path)
@@ -324,6 +329,9 @@ class PyRiteEditor(Gtk.Window):
         else:
             self.render_scroll.show()
             self.render_tags()
+            # give the newly revealed pane real width or GtkPaned can collapse it to zero
+            if self.paned.get_realized():
+                self.paned.set_position(self.paned.get_allocated_width() // 2)
 
     def on_modified(self, w):
         self.modified = self.buf.get_modified()
@@ -331,25 +339,28 @@ class PyRiteEditor(Gtk.Window):
 
     def on_text_changed(self, w):
         self.update_status()
-        
+
         # Clear stuck search highlights on text change
         s, e = self.buf.get_bounds()
         self.buf.remove_tag_by_name("search-match", s, e)
-        
-        if self.show_lines: self.sync_line_nums()
-        
-        # Throttle syntax highlighting to prevent lag on large files
-        if self.syntax:
-            if self.syntax_timeout:
-                GLib.source_remove(self.syntax_timeout)
-            self.syntax_timeout = GLib.timeout_add(300, self._do_syntax_timeout)
 
-    def _do_syntax_timeout(self):
-        self.do_syntax()
-        self.syntax_timeout = None
+        if self.show_lines: self.sync_line_nums()
+
+        # One throttled job for everything O(document): syntax, word count, live render
+        if self.deferred_id: GLib.source_remove(self.deferred_id)
+        self.deferred_id = GLib.timeout_add(300, self._deferred_update)
+
+    def _deferred_update(self):
+        self.deferred_id = None
+        if self.syntax: self.do_syntax()
+        s, e = self.buf.get_bounds()
+        self.words = len(self.buf.get_text(s, e, True).split())
+        if self.render_scroll.get_visible(): self.render_tags()
+        self.update_status()
         return False
 
     def sync_line_nums(self, w=None):
+        # counts logical lines, so wrapped rows desync the numbering; switch to GtkSourceView's built-in line numbers if that becomes an issue
         lines = self.buf.get_line_count()
         text = "\n".join(str(i+1) for i in range(lines))
         self.line_nums_buf.set_text(text)
@@ -357,40 +368,44 @@ class PyRiteEditor(Gtk.Window):
         self.line_nums.get_vadjustment().set_value(adj.get_value())
 
     def handle_keys(self, w, event):
-        # ctrl+f
-        if event.keyval == Gdk.keyval_from_name("f") and (event.state & Gdk.ModifierType.CONTROL_MASK):
-            self.find_rev.set_reveal_child(True)
-            self.find_entry.grab_focus()
-            return True
-        
+        key = Gdk.keyval_to_lower(event.keyval)
+        ctrl = event.state & Gdk.ModifierType.CONTROL_MASK
+
+        if ctrl:
+            if key == Gdk.KEY_f:
+                self.find_rev.set_reveal_child(True)
+                self.find_entry.grab_focus()
+                return True
+            if key == Gdk.KEY_n: self.new_file(); return True
+            if key == Gdk.KEY_o: self.open_file(); return True
+            if key == Gdk.KEY_s: self.save_file(); return True
+            return False
+
         # alt+z wrap
-        if event.keyval == Gdk.keyval_from_name("z") and (event.state & Gdk.ModifierType.MOD1_MASK):
+        if key == Gdk.KEY_z and (event.state & Gdk.ModifierType.MOD1_MASK):
             self.toggle_wrap()
             return True
-            
+
         # auto-indent
-        if event.keyval == Gdk.keyval_from_name("Return") and not self.vim_mode:
-            buf = self.buf
-            itr = buf.get_iter_at_mark(buf.get_insert())
-            ln = itr.get_line()
-            if ln > 0:
-                ps, pe = buf.get_iter_at_line(ln - 1), buf.get_iter_at_line(ln - 1)
-                pe.forward_to_line_end()
-                prev = buf.get_text(ps, pe, True)
-                
-                indent = ""
-                for c in prev:
-                    if c in [" ", "\t"]: indent += c
-                    else: break
-                
-                if prev.rstrip().endswith(":"):
-                    sz = 4 if self.indent == "4s" else 2 if self.indent == "2s" else 1
-                    ch = " " if "s" in self.indent else "\t"
-                    indent += ch * sz
-                
-                if indent:
-                    GLib.idle_add(lambda: buf.insert_at_cursor(indent))
-                    
+        if key == Gdk.KEY_Return and not self.vim_mode:
+            def _indent():
+                # compute at execution time, or two rapid Enters stack their indents
+                buf = self.buf
+                itr = buf.get_iter_at_mark(buf.get_insert())
+                ln = itr.get_line()
+                if ln > 0:
+                    ps = buf.get_iter_at_line(ln - 1)
+                    pe = ps.copy()
+                    pe.forward_to_line_end()
+                    prev = buf.get_text(ps, pe, True)
+                    indent = prev[:len(prev) - len(prev.lstrip(" \t"))]
+                    if prev.rstrip().endswith(":"):
+                        sz = 4 if self.indent == "4s" else 2 if self.indent == "2s" else 1
+                        indent += (" " if "s" in self.indent else "\t") * sz
+                    if indent: buf.insert_at_cursor(indent)
+                return False  # one-shot idle
+            GLib.idle_add(_indent)
+
         return False
 
     def toggle_vim(self, w=None):
@@ -406,6 +421,11 @@ class PyRiteEditor(Gtk.Window):
 
     def handle_vim_key(self, w, event):
         if not self.vim_mode: return False
+
+        # let global shortcuts (Ctrl+S/O/N/F, Alt+Z) through even in vim mode;
+        # vim has no modifier bindings here, so never swallow them
+        if event.state & (Gdk.ModifierType.CONTROL_MASK | Gdk.ModifierType.MOD1_MASK):
+            return False
 
         keyval = event.keyval
         keyname = Gdk.keyval_name(keyval)
@@ -466,11 +486,13 @@ class PyRiteEditor(Gtk.Window):
 
     def run_vim_cmd(self):
         cmd = self.vim_cmd.strip(":").strip()
-        if cmd == "w": self.save_file()
-        elif cmd == "q": Gtk.main_quit()
-        elif cmd == "wq":
+        if cmd == "w":
             self.save_file()
-            Gtk.main_quit()
+        elif cmd == "q":
+            self.quit_app()
+        elif cmd == "wq":
+            if self.save_file() is not False:
+                self.quit_app()
         self.vim_cmd_mode = False
         self.vim_cmd = ""
         self.update_status()
@@ -478,7 +500,7 @@ class PyRiteEditor(Gtk.Window):
     def render_tags(self, w=None):
         s, e = self.buf.get_bounds()
         content = self.buf.get_text(s, e, False)
-        parts = re.split(r'(<ts=\d+>|</ts=\d+>|<italic>|</italic>|<bold>|</bold>)', content)
+        parts = re.split(r'(<ts=[^>]*>|</ts=[^>]*>|<italic>|</italic>|<bold>|</bold>)', content)
         
         self.r_buf.set_text("")
         tags = []
@@ -490,13 +512,18 @@ class PyRiteEditor(Gtk.Window):
             elif p == "</bold>" and "r_bold" in tags: tags.remove("r_bold")
             elif p == "<italic>": tags.append("r_italic")
             elif p == "</italic>" and "r_italic" in tags: tags.remove("r_italic")
-            elif re.match(r'<ts=\d+>', p):
-                sz = p.split("=")[1][:-1]
-                tname = f"r_ts_{sz}"
+            elif re.match(r'<ts=[^>]*>', p):
+                sz = p[4:-1]
+                tname = "r_ts_" + re.sub(r'[^0-9A-Za-z_.]', '_', sz)
                 if not table.lookup(tname):
-                    self.r_buf.create_tag(tname, scale=float(sz)/11.0)
+                    try:
+                        scale = float(sz) / 11.0
+                    except ValueError:
+                        scale = 1.0
+                    if not (0 < scale <= 10): scale = 1.0
+                    self.r_buf.create_tag(tname, scale=scale)
                 tags.append(tname)
-            elif re.match(r'</ts=\d+>', p):
+            elif re.match(r'</ts=[^>]*>', p):
                 for i in range(len(tags)-1, -1, -1):
                     if tags[i].startswith("r_ts_"):
                         tags.pop(i)
@@ -505,26 +532,31 @@ class PyRiteEditor(Gtk.Window):
                 self.r_buf.insert_with_tags_by_name(self.r_buf.get_end_iter(), p, *tags)
 
     def do_syntax(self):
+        if not self.syntax: return  # a pending timer must not resurrect highlighting
         s, e = self.buf.get_bounds()
         for tag in ["syn_keyword", "syn_string", "syn_comment"]:
             self.buf.remove_tag_by_name(tag, s, e)
 
-        text = self.buf.get_text(s, e, False)
-        
-        # comments
-        for m in re.finditer(r'(#.*?$)', text, re.MULTILINE):
-            ms, me = self.buf.get_iter_at_offset(m.start(1)), self.buf.get_iter_at_offset(m.end(1))
-            self.buf.apply_tag_by_name("syn_comment", ms, me)
-            
-        # strings
-        for m in re.finditer(r'("(?:[^"\\]|\\.)*"|\'(?:[^\'\\]|\\.)*\')', text):
-            ms, me = self.buf.get_iter_at_offset(m.start(1)), self.buf.get_iter_at_offset(m.end(1))
-            self.buf.apply_tag_by_name("syn_string", ms, me)
-            
-        # keywords
+        # include hidden chars so regex offsets line up with buffer offsets
+        text = self.buf.get_text(s, e, True)
+
+        # strings before comments in one pass, so '#' inside a string stays string-colored.
+        # Remember their spans so keywords inside them aren't mis-highlighted.
+        # TODO: this regex lexer has no triple-quote or nesting awareness; swap in a real tokenizer if that becomes a problem
+        literal_spans = []
+        for m in re.finditer(r'("(?:[^"\\]|\\.)*"|\'(?:[^\'\\]|\\.)*\')|(#.*?$)', text, re.MULTILINE):
+            tag = "syn_string" if m.group(1) else "syn_comment"
+            ms, me = self.buf.get_iter_at_offset(m.start()), self.buf.get_iter_at_offset(m.end())
+            self.buf.apply_tag_by_name(tag, ms, me)
+            literal_spans.append((m.start(), m.end()))
+
+        # keywords (skip any that fall inside a string or comment)
         kws = ["def", "class", "return", "if", "else", "elif", "import", "from", "while", "for", "in", "not", "and", "or", "True", "False", "None"]
         for m in re.finditer(r'\b(' + '|'.join(kws) + r')\b', text):
-            ms, me = self.buf.get_iter_at_offset(m.start(1)), self.buf.get_iter_at_offset(m.end(1))
+            ks, ke = m.start(1), m.end(1)
+            if any(ks >= ls and ke <= le for ls, le in literal_spans):
+                continue
+            ms, me = self.buf.get_iter_at_offset(ks), self.buf.get_iter_at_offset(ke)
             self.buf.apply_tag_by_name("syn_keyword", ms, me)
 
     def on_search(self, w):
@@ -534,11 +566,16 @@ class PyRiteEditor(Gtk.Window):
         
         if q:
             i = s.copy()
+            first = None
             while True:
                 m = i.forward_search(q, Gtk.TextSearchFlags.CASE_INSENSITIVE, e)
                 if not m: break
                 self.buf.apply_tag_by_name("search-match", m[0], m[1])
+                if first is None: first = m
                 i = m[1]
+            if first is not None:
+                self.buf.select_range(first[0], first[1])
+                self.tview.scroll_to_iter(first[0], 0.0, True, 0.0, 0.0)
 
     def on_search_key(self, w, event):
         if event.keyval == Gdk.keyval_from_name("Escape"):
@@ -550,12 +587,15 @@ class PyRiteEditor(Gtk.Window):
         return False
 
     def new_file(self, w=None):
+        if not self.confirm_discard(): return
         self.buf.set_text("")
         self.cur_file = None
         self.buf.set_modified(False)
+        self.words = 0
         self.update_status()
 
     def open_file(self, w=None, path=None):
+        if not self.confirm_discard(): return
         if path:
             self.open_specific_file(path)
             return
@@ -580,10 +620,11 @@ class PyRiteEditor(Gtk.Window):
             return
             
         try:
-            with open(path, "r") as f: content = f.read()
+            with open(path, encoding="utf-8", errors="replace") as f: content = f.read()
             self.buf.set_text(content)
             self.cur_file = path
             self.buf.set_modified(False)
+            self.words = len(content.split())
             self.add_recent(path)
             self.update_status()
         except Exception as ex:
@@ -591,35 +632,59 @@ class PyRiteEditor(Gtk.Window):
 
     def save_file(self, w=None):
         if not self.cur_file:
-            self.save_as()
-            return
+            return self.save_as()
             
         try:
             s, e = self.buf.get_bounds()
-            with open(self.cur_file, "w") as f:
+            with open(self.cur_file, "w", encoding="utf-8") as f:
                 f.write(self.buf.get_text(s, e, False))
             self.buf.set_modified(False)
             self.add_recent(self.cur_file)
-            self.update_status()
+            return True
         except Exception as ex:
             print(f"Save failed: {ex}")
+            dlg = Gtk.MessageDialog(transient_for=self, modal=True,
+                                    message_type=Gtk.MessageType.ERROR, buttons=Gtk.ButtonsType.CLOSE,
+                                    text=f"Save failed: {ex}")
+            dlg.run(); dlg.destroy()
+            return False
+
+    def confirm_discard(self):
+        if not self.buf.get_modified(): return True
+        name = os.path.basename(self.cur_file) if self.cur_file else "untitled"
+        dlg = Gtk.MessageDialog(transient_for=self, modal=True,
+                                message_type=Gtk.MessageType.QUESTION, buttons=Gtk.ButtonsType.NONE,
+                                text=f"'{name}' has unsaved changes. Discard them?")
+        dlg.add_button("Cancel", Gtk.ResponseType.CANCEL)
+        dlg.add_button("Discard", Gtk.ResponseType.OK)
+        r = dlg.run(); dlg.destroy()
+        return r == Gtk.ResponseType.OK
+
+    def quit_app(self, w=None):
+        if self.confirm_discard():
+            Gtk.main_quit()
+            return False
+        return True  # blocks window delete-event
 
     def save_as(self, w=None):
         dlg = Gtk.FileChooserNative.new("Save File As", self, Gtk.FileChooserAction.SAVE, "_Save", "_Cancel")
         dlg.set_do_overwrite_confirmation(True)
-        if dlg.run() == Gtk.ResponseType.ACCEPT:
-            self.cur_file = dlg.get_filename()
-            self.save_file()
+        accepted = dlg.run() == Gtk.ResponseType.ACCEPT
         dlg.destroy()
+        if accepted:
+            self.cur_file = dlg.get_filename()
+            return self.save_file()
+        return False
 
     def update_status(self):
-        fname = os.path.basename(self.cur_file) if self.cur_file else "untitled"
+        raw = os.path.basename(self.cur_file) if self.cur_file else "untitled"
+        fname = GLib.markup_escape_text(raw)
         mod = '<span foreground="#e06c75">●</span>' if self.modified else '<span foreground="#3e3e3e">●</span>'
         
         if not self.vim_mode:
             mode = '<span foreground="#abb2bf">[STANDARD]</span>'
         elif self.vim_cmd_mode:
-            mode = f'<span foreground="#d19a66">[{self.vim_cmd}]</span>'
+            mode = f'<span foreground="#d19a66">[{GLib.markup_escape_text(self.vim_cmd)}]</span>'
         elif self.vim_state == "NORMAL":
             mode = '<span foreground="#d19a66">[NORMAL]</span>'
         else:
@@ -628,15 +693,13 @@ class PyRiteEditor(Gtk.Window):
         itr = self.buf.get_iter_at_mark(self.buf.get_insert())
         line = itr.get_line() + 1
         col = itr.get_line_offset() + 1
-        
-        s, e = self.buf.get_bounds()
-        words = len(self.buf.get_text(s, e, True).split())
-        
-        self.lbl_status.set_markup(f"{mode} {fname} {mod}  |  Ln {line}, Col {col}  |  Words: {words}  |  UTF-8")
-        self.set_title(f"{'● ' if self.modified else ''}{fname} - PyRite")
+
+        self.lbl_status.set_markup(f"{mode} {fname} {mod}  |  Ln {line}, Col {col}  |  Words: {self.words}  |  UTF-8")
+        self.set_title(f"{'● ' if self.modified else ''}{raw} - PyRite")
 
 if __name__ == "__main__":
     win = PyRiteEditor()
+    win.connect("delete-event", win.quit_app)
     win.connect("destroy", Gtk.main_quit)
     win.show_all()
     # show_all() reveals every child; re-hide the panes that start disabled
