@@ -1,6 +1,5 @@
 <div align="center">
 
-<!-- Animated Header -->
 <pre style="background: transparent;">
 ╔══════════════════════════════════════════════════════════════════╗
 ║                                                                  ║
@@ -16,19 +15,20 @@
 ╚══════════════════════════════════════════════════════════════════╝
 </pre>
 
-<!-- Badges -->
 <img src="https://img.shields.io/badge/Python-3.6+-1e1e1e?style=for-the-badge&logo=python&logoColor=d19a66&labelColor=252526">
 <img src="https://img.shields.io/badge/GTK-3.0-1e1e1e?style=for-the-badge&logo=gtk&logoColor=56b6c2&labelColor=252526">
+<img src="https://img.shields.io/badge/GtkSourceView-4.0-1e1e1e?style=for-the-badge&logo=gnome&logoColor=4a86cf&labelColor=252526">
 <img src="https://img.shields.io/badge/License-MIT-1e1e1e?style=for-the-badge&logo=opensourceinitiative&logoColor=98c379&labelColor=252526">
-<img src="https://img.shields.io/badge/Status-Early_Development-1e1e1e?style=for-the-badge&logo=fireship&logoColor=d19a66&labelColor=252526">
+<img src="https://img.shields.io/badge/Status-Production-1e1e1e?style=for-the-badge&logo=fireship&logoColor=61a03c&labelColor=252526">
 
 <br><br>
 
-> A single-file GTK3 text editor with a One Dark theme, basic modal editing, and zero config files.
+> A single-file GTK3 text editor built on GtkSourceView4 with a dark theme,
+> full vim emulation, and zero config.
 
 <br>
 
-[🚀 Features](#-features) • [⚡ Installation](#-installation) • [⌨️ Keybindings](#-keybindings) • [🎨 Theming](#-theming) • [🧭 Known Limitations](#-known-limitations)
+[🚀 Features](#-features) • [⌨️ Keybindings](#-keybindings) • [🎨 Theming](#-theming) • [📦 Installation](#-installation)
 
 </div>
 
@@ -41,19 +41,26 @@
 <td width="50%">
 
 ### 🧠 Editing
-- **Auto-Indent** — continues indentation after a line ending in `:`
+- **Undo / Redo** — 100-level undo stack via GtkSourceView4
+- **Auto-Indent** — continues indentation after `:`
 - **Word Wrap** — `Alt+Z` to toggle
-- **Find & Highlight** — `Ctrl+F`, live match highlighting
-- **Recent Files** — remembers your last 5 files
+- **Find & Replace** — `Ctrl+F`, live highlighting, replace one/all
+- **Recent Files** — remembers your last 10 files
+- **File Monitoring** — detects external changes, prompts reload
+- **Drag & Drop** — drop files onto the window to open
 
 </td>
 <td width="50%">
 
-### ⌨️ Modal Editing
+### ⌨️ Modal Editing (Vim)
 - **NORMAL / INSERT** toggle via `Esc` / `i`
-- **Command Mode** — `:w`, `:q`, `:wq`
-- **HJKL Navigation** and `x` to delete a character
-- *(This is a lightweight modal layer, not a vim clone — see [Known Limitations](#-known-limitations))*
+- **Command Mode** — `:w`, `:q`, `:wq`, `:q!`
+- **HJKL Navigation** with count prefixes (`5j`)
+- **Word Motions** — `w`, `b`, `e`
+- **Line Ops** — `dd` (delete), `yy` (yank), `p` (paste)
+- **Undo / Redo** — `u` / `Ctrl+R`
+- **Goto** — `gg` (top), `G` (bottom), `0`/`$` (line start/end)
+- **New** — `o`, `O`, `A`, `a` for insert variants
 
 </td>
 </tr>
@@ -61,9 +68,10 @@
 <td width="50%">
 
 ### 🎨 Syntax Highlighting
-- **Python-aware** — keywords, strings, comments
-- **Debounced** to 300ms so it doesn't lag on large files
-- **One Dark** color palette, on by toggle
+- **Auto-detect** language from file extension
+- **60+ languages** via GtkSourceView4
+- **Oblivion** dark color scheme, baked in
+- **Bracket matching** highlighted
 
 </td>
 <td width="50%">
@@ -71,45 +79,11 @@
 ### 📜 Render Mode
 - **Inline markup preview** in a side pane
 - **Custom tags** — `<bold>`, `<italic>`, `<ts=16>`
-- Rebuilds when you toggle Render on (not live as you type yet)
+- Rebuilds when toggled on
 
 </td>
 </tr>
 </table>
-
----
-
-## ⚡ Installation
-
-### Prerequisites
-
-```bash
-# Debian / Ubuntu
-sudo apt install python3-gi python3-gi-cairo gir1.2-gtk-3.0
-
-# Arch Linux
-sudo pacman -S python-gobject gtk3
-
-# Fedora
-sudo dnf install python3-gobject gtk3
-```
-
-### Clone & Run
-
-```bash
-git clone https://github.com/SulphArk/PyRite.git
-cd PyRite
-python3 PyRite.py
-```
-
-### Make it Global (Optional)
-
-```bash
-chmod +x PyRite.py
-ln -sf $(pwd)/PyRite.py ~/.local/bin/pyrite
-pyrite
-```
-> Requires a `#!/usr/bin/env python3` shebang at the top of `PyRite.py` to run directly as `pyrite` — add it if it's not already there.
 
 ---
 
@@ -120,16 +94,30 @@ pyrite
 | `Ctrl + O` | Open File | Global |
 | `Ctrl + S` | Save File | Global |
 | `Ctrl + N` | New File | Global |
-| `Ctrl + F` | Find | Global |
+| `Ctrl + F` | Find & Replace | Global |
 | `Ctrl + R` | Toggle Render | Global |
+| `Ctrl + Z` | Undo | Global |
+| `Ctrl + Y` | Redo | Global |
 | `Alt + Z` | Toggle Word Wrap | Global |
-| `Esc` | Enter NORMAL Mode | Modal |
-| `i` | Enter INSERT Mode | Modal (NORMAL) |
-| `:w` | Save | Modal (COMMAND) |
-| `:q` | Quit | Modal (COMMAND) |
-| `:wq` | Save & Quit | Modal (COMMAND) |
-| `h / j / k / l` | Navigate | Modal (NORMAL) |
-| `x` | Delete char | Modal (NORMAL) |
+| `Esc` | Enter NORMAL Mode | Vim |
+| `i` | Enter INSERT Mode | Vim (NORMAL) |
+| `a` / `A` | Insert after char / end of line | Vim (NORMAL) |
+| `o` / `O` | Open line below / above | Vim (NORMAL) |
+| `:w` | Save | Vim (COMMAND) |
+| `:q` | Quit | Vim (COMMAND) |
+| `:wq` | Save & Quit | Vim (COMMAND) |
+| `:q!` | Force Quit | Vim (COMMAND) |
+| `h / j / k / l` | Navigate | Vim (NORMAL) |
+| `w / b / e` | Word forward/back/end | Vim (NORMAL) |
+| `x` | Delete char | Vim (NORMAL) |
+| `dd` | Delete line | Vim (NORMAL) |
+| `yy` | Yank line | Vim (NORMAL) |
+| `p` | Paste | Vim (NORMAL) |
+| `u` | Undo | Vim (NORMAL) |
+| `Ctrl+R` | Redo | Vim (NORMAL) |
+| `gg` / `G` | Go to top / bottom | Vim (NORMAL) |
+| `0` / `$` | Go to line start / end | Vim (NORMAL) |
+| `V` | Select line | Vim (NORMAL) |
 
 ---
 
@@ -137,37 +125,59 @@ pyrite
 
 | Element | Color | Hex |
 |---------|-------|-----|
-| Background | Deep Void | `#1e1e1e` |
-| Surface | Elevated | `#252526` |
-| Accent | Burnt Orange | `#d19a66` |
-| Keywords | Cyan Ice | `#56b6c2` |
-| Strings | Sage Green | `#98c379` |
-| Modified Dot | Danger Red | `#e06c75` |
-| Comments | Muted Grey | `#5c6370` |
+| Background | Deep Void | `#101315` |
+| Surface | Elevated | `#0c0e10` |
+| Accent | User-chosen | `#61A03C` (default) |
+| Keywords | Green | `#8fbd6b` |
+| Strings | Sage | `#b9cdad` |
+| Comments | Muted | `#5c6a58` |
+| Modified Dot | Accent | user-chosen |
 
-No config files — the palette is baked into a single CSS block in the source.
+Accent color is user-configurable via Options → Accent Color. Stored in:
+
+```
+~/.config/pyrite/accent.json
+```
 
 ---
 
-## 🛠️ Configuration
+## 📦 Installation
 
-PyRite stores minimal state in:
+### Prerequisites
 
+```bash
+# Arch Linux
+sudo pacman -S python-gobject gtk3 gtksourceview4
+
+# Debian / Ubuntu
+sudo apt install python3-gi python3-gi-cairo gir1.2-gtk-3.0 gir1.2-gtksource-4
+
+# Fedora
+sudo dnf install python3-gobject gtk3 gtksourceview4
 ```
-~/.pyrite_recents.json    # Last 5 opened files
+
+### Clone & Run
+
+```bash
+git clone https://github.com/SulphArk/PyRite.git
+cd PyRite
+python3 PyRite.py
 ```
 
-Everything else is zero-config by design.
+### Make it Global
 
----
+```bash
+chmod +x PyRite.py
+ln -sf $(pwd)/PyRite.py ~/.local/bin/pyrite
+pyrite myfile.py
+```
 
-## 🧪 Render Tags
+### Desktop Integration
 
-| Tag | Effect |
-|-----|--------|
-| `<bold>text</bold>` | **Bold text** |
-| `<italic>text</italic>` | *Italic text* |
-| `<ts=20>text</ts=20>` | Custom font size |
+```bash
+cp pyrite.desktop ~/.local/share/applications/
+cp pyrite.svg ~/.local/share/icons/hicolor/scalable/apps/
+```
 
 ---
 
@@ -178,12 +188,12 @@ PyRiteEditor (Gtk.Window)
 ├── Top Bar
 │   ├── Options MenuButton
 │   └── Vim Toggle | Render Button
-├── Gtk.Paned
-│   ├── Editor Box
-│   │   ├── Line Numbers (TextView)
-│   │   └── Source View (TextView + ScrolledWindow)
-│   └── Render View (TextView + ScrolledWindow)
-├── Find Bar (Revealer)
+├── GtkSourceView (syntax, undo, line numbers)
+├── Render View (TextView + ScrolledWindow)
+├── Search Bar (Revealer)
+│   ├── Search Entry
+│   ├── Replace Entry
+│   └── Replace One / Replace All / Close
 └── Status Bar
     ├── Mode | Filename | Modified
     └── Indent Toggle
@@ -191,18 +201,29 @@ PyRiteEditor (Gtk.Window)
 
 ---
 
-## 🧭 Known Limitations
+## 📝 Configuration
 
-This is early-stage software. Being upfront about what's missing:
+PyRite stores minimal state in:
 
-- **No undo/redo** — plain `Gtk.TextBuffer` doesn't provide this for free; needs either `GtkSource.Buffer` or a manual undo stack.
-- **Modal editing is minimal** — no `dd`, yank/paste, word motions, counts, or visual mode. Think "basic navigation layer," not a vim clone.
-- **No unsaved-changes prompt** — closing, opening a new file, or `:q` will discard edits without warning.
-- **File I/O doesn't force UTF-8 encoding** — the status bar always shows "UTF-8" but reads/writes use the system locale default.
-- **Render pane isn't live** — it rebuilds when toggled, not as you type.
-- **No packaging** — no `pyproject.toml`/`setup.py`; install is manual symlink only.
+```
+~/.config/pyrite/recents.json    # Last 10 opened files
+~/.config/pyrite/accent.json     # User accent color
+```
 
-Contributions welcome on any of the above.
+Everything else is zero-config by design.
+
+---
+
+## 🧭 Roadmap
+
+- [ ] Live render preview (update as you type)
+- [ ] Tab support (multi-file in one window)
+- [ ] Split view (vertical/horizontal)
+- [ ] Minimap
+- [ ] Themes (multiple built-in schemes)
+- [ ] Plugin system
+- [ ] LSP integration
+- [ ] Git gutter
 
 ---
 
@@ -218,27 +239,11 @@ Contributions welcome on any of the above.
 
 ## 📜 License
 
-MIT License — see [LICENSE](LICENSE).
-
-```
-Copyright (c) 2026 PyRite Contributors
-
-Permission is hereby granted, free of charge, to any person obtaining a copy
-of this software and associated documentation files (the "Software"), to deal
-in the Software without restriction, including without limitation the rights
-to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-copies of the Software, and to permit persons to whom the Software is
-furnished to do so, subject to the following conditions:
-
-The above copyright notice and this permission notice shall be included in all
-copies or substantial portions of the Software.
-```
+MIT License
 
 ---
 
 <div align="center">
-
-<br>
 
 **A small editor, honestly described.**
 

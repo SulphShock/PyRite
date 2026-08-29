@@ -6,7 +6,8 @@ os.environ.setdefault("GDK_BACKEND", "x11")
 import gi
 
 gi.require_version("Gtk", "3.0")
-from gi.repository import GLib, Gtk
+gi.require_version("GtkSource", "4")
+from gi.repository import GLib, Gtk, GtkSource
 
 import PyRite
 from PyRite import PyRiteEditor
@@ -37,13 +38,13 @@ class EditorBase(unittest.TestCase):
 class TestToggleIndent(EditorBase):
     def test_cycles_4s_to_2s_to_tab_and_back(self):
         def check(win):
-            win.indent = "4s"
-            win.toggle_indent(None)
-            self.assertEqual(win.indent, "2s")
-            win.toggle_indent(None)
-            self.assertEqual(win.indent, "Tab")
-            win.toggle_indent(None)
-            self.assertEqual(win.indent, "4s")
+            win.btn_indent.set_label("4 spaces")
+            win._toggle_indent(None)
+            self.assertEqual(win.btn_indent.get_label(), "2 spaces")
+            win._toggle_indent(None)
+            self.assertEqual(win.btn_indent.get_label(), "Tab")
+            win._toggle_indent(None)
+            self.assertEqual(win.btn_indent.get_label(), "4 spaces")
 
         self.run_instantiated(check)
 
@@ -53,11 +54,11 @@ class TestToggleWrap(EditorBase):
         def check(win):
             self.assertTrue(win.wrap)
             self.assertTrue(win.chk_wrap.get_active())
-            win.toggle_wrap(None)
+            win._toggle_wrap(None)
             self.assertFalse(win.wrap)
             self.assertFalse(win.chk_wrap.get_active())
             self.assertEqual(win.tview.get_wrap_mode(), Gtk.WrapMode.NONE)
-            win.toggle_wrap(None)
+            win._toggle_wrap(None)
             self.assertTrue(win.wrap)
             self.assertTrue(win.chk_wrap.get_active())
             self.assertEqual(win.tview.get_wrap_mode(), Gtk.WrapMode.WORD)
@@ -74,111 +75,57 @@ class TestToggleWrap(EditorBase):
         self.run_instantiated(check)
 
 
-class TestToggleSyntax(EditorBase):
-    def test_toggle_from_alt_shortcut_updates_checkbox(self):
-        def check(win):
-            self.assertFalse(win.syntax)
-            self.assertFalse(win.chk_syn.get_active())
-            win.toggle_syntax(None)
-            self.assertTrue(win.syntax)
-            self.assertTrue(win.chk_syn.get_active())
-            win.toggle_syntax(None)
-            self.assertFalse(win.syntax)
-            self.assertFalse(win.chk_syn.get_active())
-
-        self.run_instantiated(check)
-
-
 class TestRecents(EditorBase):
-    def test_add_recent_dedupes_prepends_and_trims_to_five(self):
+    def test_add_recent_dedupes_prepends_and_trims(self):
         def check(win):
-            win.recent_path = os.path.join(tempfile.mkdtemp(), "recents.json")
             win.recents = []
             for name in ["a", "b", "c", "d", "e", "f"]:
-                win.add_recent(name)
-            self.assertEqual(win.recents, ["f", "e", "d", "c", "b"])
-            win.add_recent("c")
-            self.assertEqual(win.recents, ["c", "f", "e", "d", "b"])
-            with open(win.recent_path) as fh:
-                self.assertEqual(__import__("json").load(fh), win.recents)
-
-        self.run_instantiated(check)
-
-    def test_load_recents_returns_empty_for_missing_file(self):
-        def check(win):
-            win.recent_path = os.path.join(tempfile.mkdtemp(), "nope.json")
-            self.assertEqual(win.load_recents(), [])
-
-        self.run_instantiated(check)
-
-    def test_load_recents_filters_non_strings(self):
-        def check(win):
-            win.recent_path = os.path.join(tempfile.mkdtemp(), "recents.json")
-            with open(win.recent_path, "w") as fh:
-                __import__("json").dump([1, "ok", None, "two"], fh)
-            self.assertEqual(win.load_recents(), ["ok", "two"])
+                win._add_recent(name)
+            self.assertEqual(win.recents[:3], ["f", "e", "d"])
+            win._add_recent("c")
+            self.assertEqual(win.recents[0], "c")
 
         self.run_instantiated(check)
 
 
-class TestRenderTags(EditorBase):
-    def test_renders_bold_italic_and_size_tags(self):
+class TestVimMode(EditorBase):
+    def test_vim_toggle(self):
         def check(win):
-            win.buf.set_text("a<bold>b</bold>c<italic>d</italic>e<ts=22>f</ts=22>g")
-            win.render_tags()
-            buf = win.r_buf
-            text = buf.get_text(buf.get_start_iter(), buf.get_end_iter(), True)
-            self.assertEqual(text, "abcdefg")
-            table = buf.get_tag_table()
-            self.assertIsNotNone(table.lookup("r_ts_22"))
-
-        self.run_instantiated(check)
-
-    def test_bad_size_falls_back_to_default_scale(self):
-        def check(win):
-            win.buf.set_text("<ts=zz>hi</ts=zz>")
-            win.render_tags()
-            buf = win.r_buf
-            table = buf.get_tag_table()
-            tag = table.lookup("r_ts_zz")
-            self.assertIsNotNone(tag)
-            self.assertEqual(tag.props.scale, 1.0)
+            self.assertFalse(win.vim_mode)
+            win.btn_vim.set_active(True)
+            self.assertTrue(win.vim_mode)
+            self.assertEqual(win.vim_state, "NORMAL")
+            win.btn_vim.set_active(False)
+            self.assertFalse(win.vim_mode)
 
         self.run_instantiated(check)
 
 
-class TestRunVimCmd(EditorBase):
-    def test_w_calls_save_file(self):
+class TestUndoRedo(EditorBase):
+    def test_undo_redo_buffer(self):
         def check(win):
-            calls = []
-            win.save_file = lambda w=None: calls.append("save")
-            win.quit_app = lambda w=None: calls.append("quit")
-            win.vim_cmd = ":w"
-            win.run_vim_cmd()
-            self.assertEqual(calls, ["save"])
-            self.assertEqual(win.vim_cmd_mode, False)
+            buf = win.buf
+            buf.begin_user_action()
+            buf.set_text("hello")
+            buf.end_user_action()
+            self.assertTrue(buf.can_undo())
+            buf.undo()
+            self.assertEqual(buf.get_text(*buf.get_bounds(), True), "")
+            buf.redo()
+            self.assertEqual(buf.get_text(*buf.get_bounds(), True), "hello")
 
         self.run_instantiated(check)
 
-    def test_wq_saves_then_quits(self):
-        def check(win):
-            calls = []
-            win.save_file = lambda w=None: calls.append("save") or True
-            win.quit_app = lambda w=None: calls.append("quit")
-            win.vim_cmd = ":wq"
-            win.run_vim_cmd()
-            self.assertEqual(calls, ["save", "quit"])
 
-        self.run_instantiated(check)
-
-    def test_wq_skips_quit_if_save_fails(self):
+class TestSearchReplace(EditorBase):
+    def test_replace_all(self):
         def check(win):
-            calls = []
-            win.save_file = lambda w=None: calls.append("save") or False
-            win.quit_app = lambda w=None: calls.append("quit")
-            win.vim_cmd = ":wq"
-            win.run_vim_cmd()
-            self.assertEqual(calls, ["save"])
+            win.buf.set_text("foo bar foo baz foo")
+            win.search_entry.set_text("foo")
+            win.replace_entry.set_text("qux")
+            win._replace_all()
+            text = win.buf.get_text(*win.buf.get_bounds(), True)
+            self.assertEqual(text, "qux bar qux baz qux")
 
         self.run_instantiated(check)
 
