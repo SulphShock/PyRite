@@ -41,13 +41,13 @@
 <td width="50%">
 
 ### 🧠 Editing
-- **Undo / Redo** — 100-level undo stack via GtkSourceView4
-- **Auto-Indent** — continues indentation after `:`
-- **Word Wrap** — `Alt+Z` to toggle
-- **Find & Replace** — `Ctrl+F`, live highlighting, replace one/all
-- **Recent Files** — remembers your last 10 files
-- **File Monitoring** — detects external changes, prompts reload
-- **Drag & Drop** — drop files onto the window to open
+- **Undo / Redo** - 100-level undo stack via GtkSourceView4
+- **Auto-Indent** - continues indentation after `:`
+- **Word Wrap** -`Alt+Z` to toggle
+- **Find & Replace** - `Ctrl+F`, live highlighting, replace one/all
+- **Recent Files** - remembers your last 10 files
+- **File Monitoring** - detects external changes, prompts reload
+- **Drag & Drop** - drop files onto the window to open
 
 </td>
 <td width="50%">
